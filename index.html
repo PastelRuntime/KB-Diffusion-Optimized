@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Masked diffusion — keyboard denoising demo</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html,body{margin:0;height:100%;background:#0a0d12;color:#dfe6f3;font-family:system-ui,sans-serif;overflow:hidden}
+  #app{position:relative;width:100%;height:100%}
+  canvas{display:block}
+  .panel{position:absolute;background:rgba(14,18,26,.84);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:10px 14px;backdrop-filter:blur(6px)}
+  #hud{top:14px;left:14px;max-width:360px}
+  #hud h1{font-size:15px;margin:0 0 3px;font-weight:600}
+  #hud .sub{font-size:12px;color:#8d99ad;line-height:1.45}
+  #backend{font-size:11.5px;color:#6f7d93;margin-top:6px}
+  #status{font-size:13px;color:#cdd7e6;margin-top:7px;min-height:48px;line-height:1.45}
+  #right{top:14px;right:14px;width:262px}
+  .prow{display:flex;align-items:center;gap:8px;margin:5px 0;font-size:12.5px}
+  .pname{width:66px}
+  .pbar{flex:1;height:7px;background:#1c2330;border-radius:4px;overflow:hidden}
+  .pfill{height:100%;background:#378ADD;transition:width .5s}
+  .ppct{width:36px;text-align:right;color:#8d99ad;font-variant-numeric:tabular-nums}
+  #log{margin-top:10px;border-top:1px solid rgba(255,255,255,.08);padding-top:7px;font-size:11.5px;color:#8d99ad;line-height:1.5;max-height:180px;overflow-y:auto}
+  #log .ev{margin:3px 0}
+  #log .hot{color:#EF9F27}
+  #bar{bottom:16px;left:50%;transform:translateX(-50%);display:flex;gap:8px;align-items:center}
+  button{background:#1b2230;border:1px solid #2c3650;color:#dfe6f3;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer}
+  button:hover{background:#232c3f}
+  #stepLbl{font-size:13px;min-width:56px;text-align:center;color:#aab6c8;font-variant-numeric:tabular-nums}
+  #paceWrap{display:flex;align-items:center;gap:6px;font-size:12px;color:#8d99ad}
+  #pace{width:90px}
+  #legend{bottom:16px;left:14px;font-size:11.5px;color:#8d99ad;display:flex;gap:6px;align-items:center;flex-wrap:wrap;max-width:430px}
+  .sw{width:13px;height:13px;border-radius:3px;display:inline-block}
+  #tip{position:fixed;display:none;pointer-events:none;background:rgba(10,13,19,.93);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:8px 11px;font-size:12px;z-index:10;min-width:150px}
+  .trow{display:flex;align-items:center;gap:7px;margin:2.5px 0}
+  .tch{width:14px;font-weight:600;font-family:ui-monospace,Menlo,monospace}
+  .tbar{height:5px;background:#378ADD;border-radius:3px}
+  .tpct{color:#8d99ad;font-variant-numeric:tabular-nums}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="panel" id="hud">
+    <h1>Masked diffusion, denoising a keyboard</h1>
+    <div class="sub">Number row is <i>given context</i> (like a prompt); the side cluster is scenery. The 30 letter keys start fully masked — blank. Each step: predict every masked key in parallel → commit only the most confident → re-mask the rest back to blank. Committed keys become context for the next step.</div>
+    <div id="backend">model: analytic Bayes (exact)</div>
+    <div id="status">All 30 letter keys masked — four layouts equally likely. Press Step to run the first prediction pass.</div>
+  </div>
+  <div class="panel" id="right">
+    <div style="font-size:12px;color:#8d99ad;margin-bottom:4px">Layout posterior (exact Bayes)</div>
+    <div id="bars"></div>
+    <div id="log"></div>
+  </div>
+  <div class="panel" id="bar">
+    <button id="stepBtn">Step</button>
+    <button id="autoBtn">Auto</button>
+    <button id="resetBtn">Reset</button>
+    <button id="spinBtn">Orbit: off</button>
+    <span id="paceWrap">pace <input id="pace" type="range" min="1.4" max="5" step="0.1" value="2.8" title="seconds per step"></span>
+    <span id="stepLbl">Step 0</span>
+  </div>
+  <div class="panel" id="legend"><span>committed:</span>
+    <span class="sw" style="background:#B5D4F4"></span><span>early</span>
+    <span class="sw" style="background:#85B7EB"></span><span class="sw" style="background:#378ADD"></span>
+    <span class="sw" style="background:#185FA5"></span><span>late</span>
+    <span style="margin-left:8px">blank = masked · faint letter = this step's guess (wiped on re-mask) · hover any key</span>
+  </div>
+  <div id="tip"></div>
+</div>
+
+<script type="importmap">
+{"imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import {RoundedBoxGeometry} from 'three/addons/geometries/RoundedBoxGeometry.js';
+
+/* ================= MODEL SEAM =================
+   getDistributions(committed) is the only function the sampler, tooltips and
+   ghost glyphs call. Analytic Bayes by default; auto-switches to the trained
+   net if weights.json sits next to this file (run export_weights.py).
+   Inference is a ~100-line pure-JS transformer below — no runtimes, no CDNs,
+   nothing to version-skew. It self-tests against PyTorch logits baked into
+   weights.json and refuses to activate if they don't match.
+   The posterior panel ALWAYS stays analytic — ground truth vs the net.
+
+   Digits are fed as pre-committed context (positions 0-9). The trained model
+   handles this natively (any visible subset is in-distribution). If you
+   enable the spicy true-AZERTY top row, the number row becomes contested —
+   remove it from context and make it part of the canvas.
+================================================ */
+const DIGITS="1234567890";
+const LAYOUTS=[
+  {n:"QWERTY",  s:DIGITS+"QWERTYUIOPASDFGHJKL;ZXCVBNM,./"},
+  {n:"Dvorak",  s:DIGITS+"',.PYFGCRLAOEUIDHTNS;QJKXBMWVZ"},
+  {n:"Colemak", s:DIGITS+"QWFPGJLUY;ARSTDHNEIOZXCVBKM,./"},
+  {n:"AZERTY",  s:DIGITS+"AZERTYUIOPQSDFGHJKLMWXCVBN,;:!"}
+
+];
+const N=40, CTX_END=10, EST=16;
+const RAMP=["#B5D4F4","#85B7EB","#378ADD","#185FA5"];
+const RAMP_TXT=["#0b2a4a","#0b2a4a","#eaf3ff","#eaf3ff"];
+
+let committed, stepN, auto=false, busy=false, predictedOnce=false, ghostsVisible=false;
+let net=null;
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const paceMs=()=>parseFloat(document.getElementById('pace').value)*1000;
+
+function posteriorFrom(comm){
+  const w=LAYOUTS.map(l=>{
+    for(let i=0;i<N;i++) if(comm[i] && l.s[i]!==comm[i].ch) return 0;
+    return 1;
+  });
+  const t=w.reduce((a,b)=>a+b,0);
+  return t ? w.map(x=>x/t) : w;
+}
+const survivors=w=>LAYOUTS.filter((l,li)=>w[li]>0).map(l=>l.n);
+
+let distCache={key:null,val:null};
+async function getDistributions(comm){
+  const key=comm.map(c=>c?c.ch:'\u0000').join('');
+  if(distCache.key===key) return distCache.val;
+  let val;
+  if(net){
+    val=netDistributions(comm);
+  }else{
+    const w=posteriorFrom(comm);
+    val=Array.from({length:N},(_,i)=>{
+      const d={};
+      LAYOUTS.forEach((l,li)=>{ if(w[li]>0) d[l.s[i]]=(d[l.s[i]]||0)+w[li]; });
+      return d;
+    });
+  }
+  distCache={key,val};
+  return val;
+}
+
+/* ---------------- pure-JS transformer inference ---------------- */
+function unpack(o){
+  const bin=atob(o.data);
+  const u8=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++)u8[i]=bin.charCodeAt(i);
+  return new Float32Array(u8.buffer);
+}
+function erf(x){
+  const s=Math.sign(x); x=Math.abs(x);
+  const t=1/(1+0.3275911*x);
+  const y=1-((((1.061405429*t-1.453152027)*t+1.421413741)*t-0.284496736)*t+0.254829592)*t*Math.exp(-x*x);
+  return s*y;
+}
+const gelu=x=>0.5*x*(1+erf(x/Math.SQRT2));
+function layernorm(x,T,D,g,b){
+  const out=new Float32Array(T*D);
+  for(let t=0;t<T;t++){
+    let m=0; for(let d=0;d<D;d++)m+=x[t*D+d]; m/=D;
+    let v=0; for(let d=0;d<D;d++){const e=x[t*D+d]-m; v+=e*e;} v/=D;
+    const inv=1/Math.sqrt(v+1e-5);
+    for(let d=0;d<D;d++)out[t*D+d]=(x[t*D+d]-m)*inv*g[d]+b[d];
+  }
+  return out;
+}
+function linear(x,T,In,Out,Wt,b){           /* PyTorch Linear: W is [Out,In] */
+  const out=new Float32Array(T*Out);
+  for(let t=0;t<T;t++)for(let o=0;o<Out;o++){
+    let s=b?b[o]:0; const xo=t*In, wo=o*In;
+    for(let k=0;k<In;k++)s+=x[xo+k]*Wt[wo+k];
+    out[t*Out+o]=s;
+  }
+  return out;
+}
+function forward(tokens){                    /* the whole model, readable */
+  const M=net.meta, W=net.W, T=M.n, D=M.dim, H=M.heads, hd=D/H;
+  const x=new Float32Array(T*D);
+  for(let t=0;t<T;t++)for(let d=0;d<D;d++)
+    x[t*D+d]=W['tok.weight'][tokens[t]*D+d]+W['pos'][t*D+d];
+  for(let l=0;l<M.layers;l++){
+    const p=`blocks.layers.${l}.`;
+    const xn=layernorm(x,T,D,W[p+'norm1.weight'],W[p+'norm1.bias']);
+    const qkv=linear(xn,T,D,3*D,W[p+'self_attn.in_proj_weight'],W[p+'self_attn.in_proj_bias']);
+    const ctx=new Float32Array(T*D);
+    const sc=new Float32Array(T);
+    for(let h=0;h<H;h++){
+      const qo=h*hd, ko=D+h*hd, vo=2*D+h*hd;
+      for(let i=0;i<T;i++){
+        let mx=-1e30;
+        for(let j=0;j<T;j++){
+          let s=0; for(let d=0;d<hd;d++)s+=qkv[i*3*D+qo+d]*qkv[j*3*D+ko+d];
+          s/=Math.sqrt(hd); sc[j]=s; if(s>mx)mx=s;
+        }
+        let Z=0; for(let j=0;j<T;j++){sc[j]=Math.exp(sc[j]-mx);Z+=sc[j];}
+        for(let d=0;d<hd;d++){
+          let a=0; for(let j=0;j<T;j++)a+=sc[j]*qkv[j*3*D+vo+d];
+          ctx[i*D+h*hd+d]=a/Z;
+        }
+      }
+    }
+    const ao=linear(ctx,T,D,D,W[p+'self_attn.out_proj.weight'],W[p+'self_attn.out_proj.bias']);
+    for(let i=0;i<T*D;i++)x[i]+=ao[i];
+    const xn2=layernorm(x,T,D,W[p+'norm2.weight'],W[p+'norm2.bias']);
+    const h1=linear(xn2,T,D,M.ff,W[p+'linear1.weight'],W[p+'linear1.bias']);
+    for(let i=0;i<h1.length;i++)h1[i]=gelu(h1[i]);
+    const h2=linear(h1,T,M.ff,D,W[p+'linear2.weight'],W[p+'linear2.bias']);
+    for(let i=0;i<T*D;i++)x[i]+=h2[i];
+  }
+  const xn=layernorm(x,T,D,W['norm.weight'],W['norm.bias']);
+  return linear(xn,T,D,net.V,W['head.weight'],W['head.bias']);   /* [T,V] */
+}
+function netDistributions(comm){
+  const M=net.meta;
+  const tokens=Array.from({length:M.n},(_,i)=>comm[i]?net.stoi[comm[i].ch]:M.mask_id);
+  const L=forward(tokens);
+  return Array.from({length:M.n},(_,p)=>{
+    let mx=-1e30;
+    for(let v=0;v<net.V;v++)if(v!==M.mask_id&&L[p*net.V+v]>mx)mx=L[p*net.V+v];
+    let Z=0; const e=new Float64Array(net.V);
+    for(let v=0;v<net.V;v++){ if(v===M.mask_id)continue; e[v]=Math.exp(L[p*net.V+v]-mx); Z+=e[v]; }
+    const d={};
+    M.chars.forEach((c,ci)=>{ const pr=e[ci+1]/Z; if(pr>0.005)d[c]=pr; });
+    return d;
+  });
+}
+async function initNet(){
+  try{
+    const res=await fetch('weights.json'); if(!res.ok) return;
+    const blob=await res.json();
+    const W={}; for(const k in blob.tensors)W[k]=unpack(blob.tensors[k]);
+    net={meta:blob,W,V:blob.chars.length+1,
+         stoi:Object.fromEntries(blob.chars.map((c,i)=>[c,i+1]))};
+    const ref=unpack(blob.test.logits);
+    const out=forward(blob.test.tokens);
+    let err=0; for(let i=0;i<ref.length;i++)err=Math.max(err,Math.abs(ref[i]-out[i]));
+    if(err>1e-2){
+      net=null;
+      document.getElementById('backend').textContent=`model: analytic Bayes — weights.json found but self-test FAILED (max err ${err.toExponential(1)})`;
+      console.warn('JS engine self-test failed, staying analytic. max err',err);
+      return;
+    }
+    document.getElementById('backend').textContent=`model: trained net (pure-JS engine, self-test ✓ max err ${err.toExponential(1)}) — side panel stays exact Bayes`;
+    distCache={key:null,val:null};
+    await refreshVisuals();
+  }catch(e){
+    console.warn('weights.json present but failed to load, staying analytic:',e);
+    document.getElementById('backend').textContent='model: analytic Bayes — weights.json failed to load (see console)';
+  }
+}
+const topOf=d=>{let c=null,p=0;for(const k in d)if(d[k]>p){p=d[k];c=k}return{c,p}};
+
+/* ================= SCENE ================= */
+const app=document.getElementById('app');
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.setSize(innerWidth,innerHeight);
+renderer.shadowMap.enabled=true;
+renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.1;
+app.prepend(renderer.domElement);
+
+const scene=new THREE.Scene();
+scene.background=new THREE.Color('#0a0d12');
+scene.fog=new THREE.Fog('#0a0d12',24,48);
+
+const camera=new THREE.PerspectiveCamera(45,innerWidth/innerHeight,0.1,100);
+camera.position.set(0,9,11.5);
+const controls=new OrbitControls(camera,renderer.domElement);
+controls.target.set(0.7,0.3,0.2);
+controls.enableDamping=true;
+controls.autoRotate=false; controls.autoRotateSpeed=0.55;
+controls.minDistance=6; controls.maxDistance=26;
+controls.maxPolarAngle=1.45;
+
+scene.add(new THREE.HemisphereLight('#8899bb','#10131a',0.9));
+const sun=new THREE.DirectionalLight('#ffffff',2.4);
+sun.position.set(6,11,7);
+sun.castShadow=true;
+sun.shadow.mapSize.set(2048,2048);
+Object.assign(sun.shadow.camera,{left:-12,right:12,top:12,bottom:-12,near:1,far:30});
+scene.add(sun);
+
+const ground=new THREE.Mesh(new THREE.PlaneGeometry(90,90),
+  new THREE.MeshStandardMaterial({color:'#0b0e14',roughness:1}));
+ground.rotation.x=-Math.PI/2; ground.position.y=-0.28; ground.receiveShadow=true;
+scene.add(ground);
+
+const base=new THREE.Mesh(new RoundedBoxGeometry(12.6,0.5,5.4,4,0.12),
+  new THREE.MeshStandardMaterial({color:'#151a23',roughness:0.85,metalness:0.1}));
+base.castShadow=base.receiveShadow=true;
+scene.add(base);
+
+const PITCH=1.16;
+const STAG=[-0.3,0,0.3,0.62].map(s=>s*PITCH);
+const MSTAG=STAG.reduce((a,b)=>a+b,0)/4;
+const REST_Y=0.53, RAISE=0.17;
+const capGeo=new RoundedBoxGeometry(0.98,0.55,0.98,4,0.11);
+const glyphGeo=new THREE.PlaneGeometry(0.82,0.82);
+const keys=[];
+
+for(let i=0;i<N;i++){
+  const row=Math.floor(i/10), col=i%10;
+  const mat=new THREE.MeshStandardMaterial({color:'#262c38',roughness:0.6,metalness:0.05,
+    emissive:'#000000',emissiveIntensity:0});
+  const cap=new THREE.Mesh(capGeo,mat);
+  cap.castShadow=cap.receiveShadow=true;
+  cap.position.set((col-4.5)*PITCH+STAG[row]-MSTAG, REST_Y, (row-1.5)*PITCH*1.04);
+  cap.userData={i,flash:0,think:0,targetY:REST_Y};
+  const cv=document.createElement('canvas'); cv.width=cv.height=128;
+  const tex=new THREE.CanvasTexture(cv); tex.anisotropy=8;
+  const glyph=new THREE.Mesh(glyphGeo,new THREE.MeshBasicMaterial({map:tex,transparent:true}));
+  glyph.rotation.x=-Math.PI/2; glyph.position.y=0.281;
+  cap.add(glyph);
+  cap.userData.ctx2d=cv.getContext('2d');
+  cap.userData.tex=tex;
+  scene.add(cap); keys.push(cap);
+}
+
+/* ---- static side cluster: nav keys + arrows (decorative; NOT in `keys`,
+        so the raycaster and sampler never see them — pure scenery) ---- */
+(function addSideCluster(){
+  const pad=new THREE.Mesh(new RoundedBoxGeometry(3.95,0.5,5.4,4,0.12),
+    new THREE.MeshStandardMaterial({color:'#131720',roughness:0.85,metalness:0.1}));
+  pad.position.set(8.4,-0.01,0);
+  pad.castShadow=pad.receiveShadow=true;
+  scene.add(pad);
+  const X=[7.24,8.4,9.56];
+  const defs=[
+    {ch:'Ins', x:X[0],row:0},{ch:'Home',x:X[1],row:0},{ch:'PgUp',x:X[2],row:0},
+    {ch:'Del', x:X[0],row:1},{ch:'End', x:X[1],row:1},{ch:'PgDn',x:X[2],row:1},
+    {ch:'↑',   x:X[1],row:2},
+    {ch:'←',   x:X[0],row:3},{ch:'↓',   x:X[1],row:3},{ch:'→',  x:X[2],row:3}
+  ];
+  for(const a of defs){
+    const cap=new THREE.Mesh(capGeo,
+      new THREE.MeshStandardMaterial({color:'#1d2330',roughness:0.7}));
+    cap.castShadow=cap.receiveShadow=true;
+    cap.position.set(a.x,REST_Y,(a.row-1.5)*PITCH*1.04);
+    const cv=document.createElement('canvas'); cv.width=cv.height=128;
+    const ctx=cv.getContext('2d');
+    ctx.globalAlpha=0.55; ctx.fillStyle='#7e8aa0';
+    ctx.font=`700 ${a.ch.length>1?34:80}px ui-monospace,Menlo,monospace`;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(a.ch,64,a.ch.length>1?64:70);
+    const glyph=new THREE.Mesh(glyphGeo,
+      new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(cv),transparent:true}));
+    glyph.rotation.x=-Math.PI/2; glyph.position.y=0.281;
+    cap.add(glyph);
+    scene.add(cap);
+  }
+})();
+
+function drawGlyph(k,ch,color,alpha){
+  const ctx=k.userData.ctx2d;
+  ctx.clearRect(0,0,128,128);
+  if(ch){
+    ctx.globalAlpha=alpha;
+    ctx.fillStyle=color;
+    ctx.font='700 84px ui-monospace,Menlo,Consolas,monospace';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(ch,64,70);
+    ctx.globalAlpha=1;
+  }
+  k.userData.tex.needsUpdate=true;
+}
+
+/* ================= HUD ================= */
+const statusEl=document.getElementById('status'), stepLbl=document.getElementById('stepLbl'),
+      tip=document.getElementById('tip'), logEl=document.getElementById('log');
+const bars=LAYOUTS.map(l=>{
+  const r=document.createElement('div'); r.className='prow';
+  r.innerHTML=`<span class="pname">${l.n}</span><div class="pbar"><div class="pfill"></div></div><span class="ppct"></span>`;
+  document.getElementById('bars').appendChild(r);
+  return {name:r.querySelector('.pname'),fill:r.querySelector('.pfill'),pct:r.querySelector('.ppct')};
+});
+const setStatus=s=>statusEl.textContent=s;
+function log(html,hot=false){
+  const d=document.createElement('div');
+  d.className='ev'+(hot?' hot':'');
+  d.innerHTML=html;
+  logEl.prepend(d);
+  while(logEl.children.length>30) logEl.lastChild.remove();
+}
+
+async function refreshVisuals(){
+  const dists=await getDistributions(committed);
+  const w=posteriorFrom(committed);
+  keys.forEach((k,i)=>{
+    if(i<CTX_END){
+      k.material.color.set('#1d2330');
+      k.material.emissive.set('#000000');
+      k.userData.targetY=REST_Y;
+      drawGlyph(k,committed[i].ch,'#7e8aa0',0.6);
+    }else if(committed[i]){
+      const idx=Math.min(3,Math.floor((committed[i].s-1)/EST*4));
+      k.material.color.set(RAMP[idx]);
+      k.material.emissive.set(RAMP[idx]);
+      k.userData.targetY=REST_Y+RAISE;
+      drawGlyph(k,committed[i].ch,RAMP_TXT[idx],1);
+    }else{
+      const t=topOf(dists[i]);
+      k.material.color.set('#262c38');
+      k.material.emissive.set('#3b557f');
+      k.userData.targetY=REST_Y;
+      if(!ghostsVisible || t.p<=0.27) drawGlyph(k,null,'',0);   /* blank fog:
+        outside the predict phase (re-masked = wiped), and for 4-way ties.
+        Honest to the algorithm: between steps, the only state that exists
+        is commits + masks — predictions are recomputed fresh each pass. */
+      else drawGlyph(k,t.c,'#9aa6ba',0.13+0.62*t.p);
+    }
+  });
+  bars.forEach((b,li)=>{
+    const pct=Math.round(w[li]*100);
+    b.fill.style.width=pct+'%';
+    b.pct.textContent=pct+'%';
+    b.name.style.color=pct===0?'#4a5263':'#dfe6f3';
+    b.name.style.textDecoration=pct===0?'line-through':'none';
+  });
+  stepLbl.textContent='Step '+stepN;
+}
+
+/* ================= SAMPLER ================= */
+const liveMasked=()=>{const a=[];for(let i=CTX_END;i<N;i++)if(!committed[i])a.push(i);return a;};
+const doneAll=()=>liveMasked().length===0;
+let eliminations=[];
+
+async function commitKey(i,conf){
+  const before=posteriorFrom(committed);
+  const d=(await getDistributions(committed))[i];   /* recondition after every
+     commit (ancestral sampling). Sampling all values from pre-step marginals
+     lets independent positions disagree — one key picks QWERTY's letter while
+     another picks Dvorak's — and the posterior divides by zero. In real LLMs
+     the same incoherence just degrades text quality. */
+  let r=Math.random(), ch=null;
+  for(const c in d){ r-=d[c]; if(r<=0){ch=c;break} }
+  if(!ch)ch=topOf(d).c;
+  committed[i]={ch,s:stepN};
+  keys[i].userData.flash=1;
+  const after=posteriorFrom(committed);
+  const dead=LAYOUTS.filter((l,li)=>before[li]>0&&after[li]===0).map(l=>l.n);
+  await refreshVisuals();
+  if(dead.length){
+    keys[i].material.emissive.set('#EF9F27');
+    keys[i].userData.flash=1.5;
+    const surv=survivors(after);
+    eliminations.push({ch,pos:i+1,step:stepN,dead});
+    setStatus(`Sampled '${ch}' at position ${i+1} — among the candidates, only ${surv.join(' and ')||'no library layout'} has '${ch}' there. ${dead.join(', ')} eliminated. Watch the fog: every remaining guess just sharpened.`);
+    log(`step ${stepN}: '<b>${ch}</b>' @ ${i+1} → eliminated <b>${dead.join(', ')}</b>`,true);
+    await sleep(paceMs()*0.9);
+  }else{
+    setStatus(`Committed '${ch}' (was ${Math.round(conf*100)}% confident). It now becomes context for everything still masked.`);
+    log(`step ${stepN}: committed '<b>${ch}</b>' @ ${i+1} (${Math.round(conf*100)}%)`);
+    await sleep(paceMs()*0.3);
+  }
+  return after;
+}
+
+async function finishCascade(){
+  setStatus('Only one layout remains — every masked key is now 100% certain. Committing the rest.');
+  log('one survivor → all remaining keys certain; flushing',true);
+  for(const i of liveMasked()){
+    const d=(await getDistributions(committed))[i];
+    committed[i]={ch:topOf(d).c,s:stepN};           /* greedy under certainty */
+    keys[i].userData.flash=1;
+    await refreshVisuals();
+    await sleep(120);
+  }
+}
+
+async function stepOnce(){
+  if(busy||doneAll())return;
+  busy=true; stepN++;
+  const base=paceMs();
+  const masked=liveMasked();
+  keys.forEach((k,i)=>{ if(i>=CTX_END&&!committed[i]) k.userData.think=1; });
+  setStatus(`Step ${stepN}: predicting all ${masked.length} masked keys in parallel…`);
+  await sleep(base*0.3);
+  const dists=await getDistributions(committed);
+  ghostsVisible=true;                               /* inhale: guesses wash in */
+  await refreshVisuals();
+  if(!predictedOnce){
+    predictedOnce=true;
+    setStatus('Predictions in — every masked key now has a guess (faint letters; blank = still a 4-way tie). Committing only the most confident…');
+    await sleep(base*0.5);
+  }
+  const scored=masked.map(i=>{const t=topOf(dists[i]);return{i,conf:t.p,score:t.p+Math.random()*0.15}})
+                     .sort((a,b)=>b.score-a.score);
+  const k=Math.min(masked.length, 1+(Math.random()<0.5?1:0));
+  let w=null;
+  for(const {i,conf} of scored.slice(0,k)){
+    w=await commitKey(i,conf);
+    if(w.filter(x=>x>0).length===1 && liveMasked().length>0){ await finishCascade(); break; }
+  }
+  if(doneAll()){
+    const wf=posteriorFrom(committed);
+    const win=LAYOUTS[wf.findIndex(x=>x>0.99)];
+    const story=eliminations.map(e=>`'${e.ch}'@${e.pos} (step ${e.step}, killed ${e.dead.join('+')})`).join(', ');
+    setStatus(win
+      ? `Done — converged to ${win.n}. Decided by: ${story||'sampling alone'}. Reset and rerun: same blank start, different dice, different layout.`
+      : 'Done — off-library sequence (the net drifted from Bayes; an honest failure worth showing).');
+    log(win?`converged: <b>${win.n}</b>`:'converged: off-library',true);
+    stopAuto();
+  }else{
+    const rem=liveMasked().length;
+    ghostsVisible=false;                            /* exhale: re-mask = wipe */
+    await refreshVisuals();
+    setStatus(`Re-masked the other ${rem} keys — back to blank. Nothing is lost: their guesses are a pure function of the commits, recomputed fresh next step.`);
+    await sleep(base*0.45);
+  }
+  busy=false;
+  if(auto&&!doneAll()) setTimeout(stepOnce,150);
+}
+
+function reset(){
+  stopAuto();
+  committed=Array(N).fill(null);
+  for(let i=0;i<CTX_END;i++) committed[i]={ch:DIGITS[i],s:0,ctx:true};
+  stepN=0; eliminations=[]; predictedOnce=false; ghostsVisible=false;
+  logEl.innerHTML='';
+  keys.forEach(k=>{k.userData.flash=0;k.userData.think=0;});
+  setStatus('All 30 letter keys masked — four layouts equally likely. Press Step to run the first prediction pass.');
+  refreshVisuals();
+}
+function stopAuto(){ auto=false; autoBtn.textContent='Auto'; }
+const stepBtn=document.getElementById('stepBtn'),autoBtn=document.getElementById('autoBtn'),
+      resetBtn=document.getElementById('resetBtn'),spinBtn=document.getElementById('spinBtn');
+stepBtn.onclick=stepOnce;
+autoBtn.onclick=()=>{ if(auto){stopAuto();return}
+  if(doneAll())return;
+  auto=true; autoBtn.textContent='Pause'; if(!busy) stepOnce(); };
+resetBtn.onclick=reset;
+spinBtn.onclick=()=>{controls.autoRotate=!controls.autoRotate;
+  spinBtn.textContent='Orbit: '+(controls.autoRotate?'on':'off');};
+
+/* ---- hover (cached per key+step+ghost-state) ---- */
+const ray=new THREE.Raycaster(), ptr=new THREE.Vector2();
+let hoverI=-1, tipCache={i:-1,step:-1,g:null,html:''};
+addEventListener('pointermove',e=>{
+  ptr.x=(e.clientX/innerWidth)*2-1; ptr.y=-(e.clientY/innerHeight)*2+1;
+  ray.setFromCamera(ptr,camera);
+  const hit=ray.intersectObjects(keys,false)[0];
+  hoverI=hit?hit.object.userData.i:-1;
+  if(hoverI<0){tip.style.display='none';return}
+  updateTip(hoverI,e.clientX,e.clientY);
+});
+async function updateTip(i,cx,cy){
+  if(tipCache.i!==i||tipCache.step!==stepN||tipCache.g!==ghostsVisible){
+    if(i<CTX_END){
+      tipCache.html=`Position ${i+1}: <b style="font-family:ui-monospace,monospace">${committed[i].ch}</b> — fixed context, given to the model from the start (like a prompt). Never generated.`;
+    }else if(committed[i]){
+      tipCache.html=`Position ${i+1}: committed <b style="font-family:ui-monospace,monospace">${committed[i].ch}</b> at step ${committed[i].s}.<br><span style="color:#8d99ad">Now permanent context — every masked key attends to it.</span>`;
+    }else{
+      const d=(await getDistributions(committed))[i];
+      const rows=Object.keys(d).sort((a,b)=>d[b]-d[a]).map(c=>{
+        const pct=Math.round(d[c]*100);
+        return `<div class="trow"><span class="tch">${c}</span><div class="tbar" style="width:${Math.max(3,pct)}px"></div><span class="tpct">${pct}%</span></div>`;
+      }).join('');
+      tipCache.html=`<div style="color:#8d99ad;margin-bottom:3px">Position ${i+1} — masked. Distribution${!predictedOnce?' (what the model would predict — press Step to run it)':(!ghostsVisible?' — recomputed on demand; the board itself holds only commits and masks':'')}:</div>`+rows;
+    }
+    tipCache.i=i; tipCache.step=stepN; tipCache.g=ghostsVisible;
+  }
+  tip.innerHTML=tipCache.html;
+  tip.style.display='block';
+  tip.style.left=Math.min(cx+16,innerWidth-190)+'px';
+  tip.style.top=(cy+14)+'px';
+}
+
+/* ---- loop ---- */
+function tick(){
+  requestAnimationFrame(tick);
+  keys.forEach((k,i)=>{
+    k.position.y+=(k.userData.targetY+(k.userData.flash>0.4?0.06:0)-k.position.y)*0.16;
+    k.userData.flash*=0.93;
+    k.userData.think*=0.9;
+    k.material.emissiveIntensity=k.userData.flash*0.8+k.userData.think*0.45+(i===hoverI?0.18:0);
+  });
+  controls.update();
+  renderer.render(scene,camera);
+}
+addEventListener('resize',()=>{
+  camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth,innerHeight);
+});
+reset(); tick(); initNet();
+</script>
+</body>
+</html>

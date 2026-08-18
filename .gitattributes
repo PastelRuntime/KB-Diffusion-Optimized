@@ -1,0 +1,3 @@
+# Git LFS is intentionally NOT used in this fork: GitHub public forks
+# cannot upload LFS objects. Model weights are hosted on Hugging Face:
+# https://huggingface.co/PastelRuntime/KB-Diffusion-ModelB

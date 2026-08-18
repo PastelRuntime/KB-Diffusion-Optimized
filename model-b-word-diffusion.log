@@ -1,0 +1,23 @@
+8.3s 1 /kaggle/src/script.py:26: UserWarning: enable_nested_tensor is True, but self.use_nested_tensor is False because encoder_layer.norm_first was True
+8.3s 2 self.blocks = nn.TransformerEncoder(block, layers)
+8.4s 3 device: Tesla T4, train words: 8000, params: 4.75M
+90.7s 4 step 1000  loss  3.1230  masked-acc  19.9%
+173.1s 5 step 2000  loss  2.5527  masked-acc  25.8%
+254.5s 6 step 3000  loss  2.4935  masked-acc  24.7%
+335.7s 7 step 4000  loss  2.5320  masked-acc  25.3%
+416.8s 8 step 5000  loss  2.3118  masked-acc  26.7%
+497.8s 9 step 6000  loss  2.2718  masked-acc  26.7%
+578.9s 10 step 7000  loss  2.3774  masked-acc  27.9%
+660.1s 11 step 8000  loss  2.2106  masked-acc  27.9%
+661.2s 12 parallel  train-vocab  1.6%  english  2.0%  unique 256/256  top [('hoeae', 1), ('liols', 1), ('nsnan', 1)]
+663.9s 13 k2        train-vocab 37.9%  english 39.5%  unique 256/256  top [('leiks', 1), ('muaes', 1), ('kisim', 1)]
+668.3s 14 ancestral train-vocab 66.4%  english 68.4%  unique 254/256  top [('hosta', 2), ('fanit', 2), ('realm', 1)]
+669.3s 15 greedy     train-vocab 100.0%  unique   1/64  top [('bales', 64)]
+670.1s 16 mean TV(model vs analytic unigram marginals): 0.0374
+670.1s 17 DONE
+675.2s 18 /usr/local/lib/python3.12/dist-packages/mistune.py:435: SyntaxWarning: invalid escape sequence '\|'
+675.2s 19 cells[i][c] = re.sub('\\\\\|', '|', cell)
+675.6s 20 /usr/local/lib/python3.12/dist-packages/nbconvert/filters/filter_links.py:36: SyntaxWarning: invalid escape sequence '\_'
+675.6s 21 text = re.sub(r'_', '\_', text) # Escape underscores in display text
+676.3s 22 [NbConvertApp] Converting notebook __script__.ipynb to html
+677.7s 23 [NbConvertApp] Writing 407002 bytes to __results__.html

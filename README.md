@@ -68,3 +68,21 @@ on the analytic backend; the mechanism is identical, only the numbers differ.)
 > [!NOTE]
 > Training recipe follows [LLaDA](https://arxiv.org/abs/2502.09992). An
 > educational reduction, not affiliated with it or DiffusionGemma.
+
+## Model B — 5-letter words
+
+The "generalization companion" the *Files* section alludes to:
+`model_b_word_diffusion.py` swaps the four keyboard layouts for 8000
+5-letter words and scales the transformer up to ~4.75M params. Same
+recipe, much harder hypothesis space.
+
+This is a fork of [OminousIndustries/KB-Diffusion](https://github.com/OminousIndustries/KB-Diffusion)
+(Bijan Bowen). The fork — **KB-Diffusion-Optimized** — carries the
+Model B results: script, training log, docs, and trained weights hosted
+on Hugging Face at
+[PastelRuntime/KB-Diffusion-ModelB](https://huggingface.co/PastelRuntime/KB-Diffusion-ModelB)
+(GitHub public forks can't serve Git LFS, so the weights live on HF).
+
+Full write-up of the Kaggle T4 run (loss/acc table, sampler comparison,
+analytic-Bayes check, what to try next) is in
+**[docs/model-b.md](docs/model-b.md)**.

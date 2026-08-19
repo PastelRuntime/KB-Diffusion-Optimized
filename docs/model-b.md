@@ -97,17 +97,76 @@ model's per-position distributions to exact conditional counts over the
 8000-word library. That's the test that would actually substantiate the
 keyboard demo's "net ≈ Bayes" claim for Model B.
 
+## Iteration 2 — decoding study + v3 retrain
+
+**The follow-up experiment** (`model_b_word_diffusion_v3.py`, Kaggle T4):
+pull the published v2 weights from HF, sweep decoding strategies on the
+frozen weights, then retrain a deeper v3 (8 layers, 12k steps, cosine LR,
+6.33M params) and re-run the best decoders on it. 512 samples per cell.
+
+### Sampler study on frozen v2 weights (zero retraining)
+
+| decoding | valid english | unique/512 | passes/sample |
+|---|---|---|---|
+| ancestral T=1.0 (iteration 1 baseline) | 68.8% | 501 | 5 |
+| ancestral T=0.7 | 85.7% | 479 | 5 |
+| **ancestral T=0.5** | **95.5%** | 409 | 5 |
+| threshold 0.9 (LLaDA-style parallel-commit) | 68.8% | 501 | 5 |
+| k=2 | 40.0% | 507 | 3 |
+| revision-capable (re-mask weak commits, T=0.7) | 77.1% | 451 | 22.5 |
+
+**The headline: temperature alone bought +27 points (68.8% → 95.5%) on
+the exact same weights, at the same 5 forward passes.** Iteration 1's
+lesson — "the sampler is half the model" — now has a second act: a single
+scalar knob was worth more than any architecture change tested.
+
+### v3 retrain + best decoders
+
+| decoding | valid english | unique/512 |
+|---|---|---|
+| ancestral T=1.0 | 82.6% | 499 |
+| **ancestral T=0.5** | **98.4%** | 428 |
+
+v3 at T=1.0 beats v2 at T=1.0 by 14 points — but v2 at T=0.5 beats v3 at
+T=1.0. **Decoding strategy > extra parameters**, on both axes measured.
+
+Unigram TV vs exact Bayes: 0.0135 (v2: 0.0374) — the deeper model tracks
+analytic statistics 2.7× more closely. At T=0.5 the top repeated words are
+real English (`oases`, `vivas`, `bulla`) — the mode collapse that gave v2
+greedy "bales" now lands on valid words.
+
+### Prompting (fixed first letter, v3, T=0.5)
+
+95.9% valid English overall, 32 samples per letter. Confirms the
+keyboard demo's "prompt loads the dice" claim at word scale.
+
+### Honest negatives
+
+- **Revision sampling isn't worth it at N=5**: 77–78% validity (worse
+  than plain T=0.5) at 4.5× the forward passes. With only 5 positions,
+  un-committing early mistakes costs more than it recovers. May differ
+  at longer sequences — that's an open question, not a closed one.
+- **Prefix-Bayes tracking is density-dependent**: common prefixes track
+  exact conditional Bayes closely (`br` TV 0.024, `st` 0.072, `ch`
+  0.070), rare ones degrade (`ze` TV 0.29). Net ≈ Bayes holds where the
+  training data is dense — exactly where you'd expect a learning
+  approximation to break first.
+
 ## Artifacts
 
-- `model_b_word_diffusion.py` — the training/eval script (verbatim as
-  run on the T4)
-- `model-b-word-diffusion.log` — full training/eval stdout
-- `modelb_v2.pt` — the trained `state_dict` (PyTorch zip-format,
-  19 MB), hosted on Hugging Face at
-  [PastelRuntime/KB-Diffusion-ModelB](https://huggingface.co/PastelRuntime/KB-Diffusion-ModelB)
-  alongside a model card with the results table. GitHub public forks
-  can't upload Git LFS objects (platform policy on fork networks), so
-  HF is the canonical home for the weights.
+- `model_b_word_diffusion.py` — iteration 1 training/eval script (verbatim
+  as run on the T4)
+- `model_b_word_diffusion_v3.py` — iteration 2: sampler study + v3 retrain
+- `model-b-word-diffusion.log` — iteration 1 full training/eval stdout
+- `modelb_v2.pt` — iteration 1 weights (4.75M params, 19 MB)
+- `modelb_v3.pt` — iteration 2 weights (6.33M params, 8 layers, 25 MB)
+- `results-v3.json` — iteration 2 full results (all sampler tables,
+  prompting study, Bayes checks)
+
+Both checkpoints and the model card live on Hugging Face at
+[PastelRuntime/KB-Diffusion-ModelB](https://huggingface.co/PastelRuntime/KB-Diffusion-ModelB).
+GitHub public forks can't upload Git LFS objects (platform policy on fork
+networks), so HF is the canonical home for the weights.
 
 **Verification status: unverified locally.** The sampler numbers above
 come from the Kaggle run itself; the weights have not been re-loaded
@@ -131,29 +190,19 @@ public fork"). That's why HF hosts the weights.
 
 ## What to try next
 
-In rough order of how much they would teach:
-
-1. **Add a fixed 1–2 char prefix as prompt.** The keyboard demo's
-   "digits row is frozen context" trick. Even just pre-fixing the first
-   letter with a fixed `b` should push the ancestral `valid_train`
-   well above 66% — because the model now has information to condition
-   on, instead of guessing from the unigram prior.
-2. **Stronger analytic-Bayes comparison.** Pick a handful of prefixes,
-   feed them in as fixed context, compare the model's per-position
-   distributions to exact conditional counts over `WORDS` (or over
-   `WORDS ∪ EVAL_WORDS` for the generalization question). This is what
-   would let Model B claim the same "net ≈ Bayes" status as the keyboard
-   demo's posterior panel.
-3. **Browser export.** `export_weights.py` is keyboard-specific, but a
-   5-position Model B with `dim=256, layers=6` is small enough to be a
-   very cute live demo — type a one-letter prefix, watch 5-letter words
-   denoise in. Roughly the same shape as the keyboard demo, just with
-   a much richer hypothesis space behind it.
-4. **Train on `WORDS ∪ EVAL_WORDS`** and re-measure the gap between
-   `valid_train` and `valid_english`. As-is, that ~2-point gap
-   (66.4% vs 68.4%) tells you the model is generalizing slightly past
-   memorization — but it's measured at the *string* level, which
-   understates real generalization because there are thousands of valid
-   5-letter words outside both lists. Training on the union and
-   measuring again would put a number on "learned the English letter
-   distribution" vs "memorized 8000 specific strings."
+1. **N=10 (longer sequences).** Every trend here — temperature gains,
+   iteration gains, revision costs — was measured at N=5. Longer
+   sequences are where the revision sampler's tradeoff could flip, and
+   where the parallel-vs-ancestral gap should widen. This is the single
+   most informative next axis.
+2. **Temperature/quality frontier, properly.** T=0.5 won here, but the
+   sweep was coarse (1.0 / 0.7 / 0.5). A fine sweep plus a
+   validity-vs-uniqueness Pareto plot would make the tradeoff curve
+   exact.
+3. **Train on `WORDS ∪ EVAL_WORDS`** and re-measure the
+   `valid_train` vs `valid_english` gap to separate "learned English
+   letter statistics" from "memorized 8000 strings."
+4. **Browser export.** A 5-position Model B is small enough for a cute
+   live demo — type a one-letter prefix, watch words denoise in, with
+   the temperature slider front and center. The temperature finding
+   deserves to be *visible*.

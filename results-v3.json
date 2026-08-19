@@ -1,0 +1,370 @@
+{
+  "armA_frozen_v2": {
+    "ancestral_t1.0": {
+      "valid_train": 0.664,
+      "valid_english": 0.688,
+      "unique": 501,
+      "passes_per_sample": 5.0,
+      "revisions_per_sample": 0.0,
+      "top5": [
+        [
+          "stosh",
+          2
+        ],
+        [
+          "erian",
+          2
+        ],
+        [
+          "derah",
+          2
+        ],
+        [
+          "blizz",
+          2
+        ],
+        [
+          "cutty",
+          2
+        ]
+      ]
+    },
+    "ancestral_t0.7": {
+      "valid_train": 0.842,
+      "valid_english": 0.857,
+      "unique": 479,
+      "passes_per_sample": 5.0,
+      "revisions_per_sample": 0.0,
+      "top5": [
+        [
+          "moggy",
+          3
+        ],
+        [
+          "aevia",
+          3
+        ],
+        [
+          "stosh",
+          2
+        ],
+        [
+          "kaaba",
+          2
+        ],
+        [
+          "pokey",
+          2
+        ]
+      ]
+    },
+    "ancestral_t0.5": {
+      "valid_train": 0.941,
+      "valid_english": 0.955,
+      "unique": 409,
+      "passes_per_sample": 5.0,
+      "revisions_per_sample": 0.0,
+      "top5": [
+        [
+          "fines",
+          7
+        ],
+        [
+          "brave",
+          6
+        ],
+        [
+          "modes",
+          6
+        ],
+        [
+          "muist",
+          4
+        ],
+        [
+          "sudra",
+          4
+        ]
+      ]
+    },
+    "threshold_0.9": {
+      "valid_train": 0.664,
+      "valid_english": 0.688,
+      "unique": 501,
+      "passes_per_sample": 5.0,
+      "revisions_per_sample": 0.0,
+      "top5": [
+        [
+          "stosh",
+          2
+        ],
+        [
+          "erian",
+          2
+        ],
+        [
+          "derah",
+          2
+        ],
+        [
+          "blizz",
+          2
+        ],
+        [
+          "cutty",
+          2
+        ]
+      ]
+    },
+    "k2": {
+      "valid_train": 0.369,
+      "valid_english": 0.4,
+      "unique": 507,
+      "passes_per_sample": 3.0,
+      "revisions_per_sample": 0.0,
+      "top5": [
+        [
+          "chape",
+          2
+        ],
+        [
+          "goral",
+          2
+        ],
+        [
+          "saint",
+          2
+        ],
+        [
+          "saies",
+          2
+        ],
+        [
+          "coman",
+          2
+        ]
+      ]
+    },
+    "revision": {
+      "valid_train": 0.762,
+      "valid_english": 0.771,
+      "unique": 451,
+      "passes_per_sample": 22.54,
+      "revisions_per_sample": 9.04,
+      "top5": [
+        [
+          "modes",
+          5
+        ],
+        [
+          "wages",
+          5
+        ],
+        [
+          "ducks",
+          5
+        ],
+        [
+          "magas",
+          4
+        ],
+        [
+          "camus",
+          4
+        ]
+      ]
+    }
+  },
+  "best_sampler": "ancestral_t0.5",
+  "armB_v3": {
+    "meta": {
+      "layers": 8,
+      "steps": 12000,
+      "params": 6.33
+    },
+    "ancestral_t1.0": {
+      "valid_train": 0.82,
+      "valid_english": 0.826,
+      "unique": 499,
+      "passes_per_sample": 5.0,
+      "revisions_per_sample": 0.0,
+      "top5": [
+        [
+          "bulla",
+          2
+        ],
+        [
+          "tchwi",
+          2
+        ],
+        [
+          "drabs",
+          2
+        ],
+        [
+          "theyd",
+          2
+        ],
+        [
+          "gloms",
+          2
+        ]
+      ]
+    },
+    "threshold_0.9": {
+      "valid_train": 0.82,
+      "valid_english": 0.826,
+      "unique": 499,
+      "passes_per_sample": 4.97,
+      "revisions_per_sample": 0.0,
+      "top5": [
+        [
+          "bulla",
+          2
+        ],
+        [
+          "tchwi",
+          2
+        ],
+        [
+          "drabs",
+          2
+        ],
+        [
+          "theyd",
+          2
+        ],
+        [
+          "gloms",
+          2
+        ]
+      ]
+    },
+    "revision": {
+      "valid_train": 0.771,
+      "valid_english": 0.779,
+      "unique": 470,
+      "passes_per_sample": 22.61,
+      "revisions_per_sample": 8.94,
+      "top5": [
+        [
+          "maras",
+          6
+        ],
+        [
+          "faits",
+          3
+        ],
+        [
+          "mouse",
+          3
+        ],
+        [
+          "sofas",
+          3
+        ],
+        [
+          "kasha",
+          3
+        ]
+      ]
+    },
+    "ancestral_t0.5": {
+      "valid_train": 0.984,
+      "valid_english": 0.984,
+      "unique": 428,
+      "passes_per_sample": 5.0,
+      "revisions_per_sample": 0.0,
+      "top5": [
+        [
+          "oases",
+          6
+        ],
+        [
+          "vivas",
+          5
+        ],
+        [
+          "dukes",
+          4
+        ],
+        [
+          "lores",
+          4
+        ],
+        [
+          "cates",
+          3
+        ]
+      ]
+    }
+  },
+  "prompting_v3": {
+    "overall": 0.959,
+    "per_letter": {
+      "a": 0.969,
+      "b": 0.969,
+      "c": 0.938,
+      "d": 0.938,
+      "e": 0.938,
+      "f": 0.969,
+      "g": 0.844,
+      "h": 0.969,
+      "i": 0.938,
+      "j": 1.0,
+      "k": 0.969,
+      "l": 0.938,
+      "m": 1.0,
+      "n": 0.938,
+      "o": 1.0,
+      "p": 0.938,
+      "q": 1.0,
+      "r": 0.969,
+      "s": 1.0,
+      "t": 0.969,
+      "u": 1.0,
+      "v": 1.0,
+      "w": 1.0,
+      "x": 1.0,
+      "y": 0.75,
+      "z": 1.0
+    },
+    "sampler": "ancestral_t0.5",
+    "n_per_letter": 32
+  },
+  "bayes_checks_v3": {
+    "prefixes": {
+      "qu": {
+        "tv": 0.0605,
+        "model_top": "j",
+        "analytic_top": "j"
+      },
+      "br": {
+        "tv": 0.0244,
+        "model_top": "p",
+        "analytic_top": "b"
+      },
+      "st": {
+        "tv": 0.0716,
+        "model_top": "p",
+        "analytic_top": "p"
+      },
+      "ch": {
+        "tv": 0.0696,
+        "model_top": "b",
+        "analytic_top": "b"
+      },
+      "th": {
+        "tv": 0.138,
+        "model_top": "s",
+        "analytic_top": "f"
+      },
+      "ze": {
+        "tv": 0.2929,
+        "model_top": "j",
+        "analytic_top": "j"
+      }
+    },
+    "unigram_tv": 0.0135
+  }
+}

@@ -152,6 +152,62 @@ keyboard demo's "prompt loads the dice" claim at word scale.
   training data is dense — exactly where you'd expect a learning
   approximation to break first.
 
+## Iteration 3 — N=10: where revision earns its cost
+
+**The question** (`model_b_word_diffusion_n10.py`, Kaggle T4): every trend
+so far was measured at N=5. Re-run the sampler study at N=10 — same recipe,
+same 6.34M params, same 8000 training words (10-letter ones, from a 45,872
+pool) — and see which conclusions survive.
+
+### Full sampler table (512 samples each)
+
+| sampler | valid english | unique/512 | passes | revisions |
+|---|---|---|---|---|
+| one-shot parallel | 0.0% | 512 | 1 | — |
+| k=3 | 0.4% | 512 | 4 | — |
+| k=2 | 5.1% | 512 | 5 | — |
+| ancestral T=1.0 | 29.5% | 504 | 10 | — |
+| threshold 0.9 | 28.9% | 504 | 9.6 | — |
+| ancestral T=0.7 | 48.8% | 464 | 10 | — |
+| ancestral T=0.5 | 63.3% | 328 | 10 | — |
+| revision T=0.7 | 66.0% | 356 | 40.5 | 15.8 |
+| **revision T=0.5** | **74.2%** | 200 | 38.5 | 14.8 |
+| greedy ancestral | 0% (1 unique: "repedating" ×64) | 1/64 | 10 | — |
+
+### What changed at N=10
+
+1. **The revision sampler finally wins.** At N=5 it lost to plain T=0.5
+   (77.1% vs 95.5%). At N=10 it beats every non-revision sampler
+   (74.2% vs 63.3%). With 10 positions, an early bad commit poisons
+   enough downstream predictions that un-committing it (~15 revisions
+   per sample) pays for its 4x compute. The "diffusion can revise"
+   capability has a measured regime where it wins — and a measured
+   regime (N=5) where it doesn't.
+2. **Everything got harder.** Best validity fell 98.4% (N=5) → 74.2%
+   (N=10) on matched params/data/recipe. The joint distribution over
+   10 letters is combinatorially harder. Two points on the scaling
+   curve of the mechanism, now measured.
+3. **The parallel/iterative gap exploded.** 34x at N=5 (2.0% vs
+   68.8%); unbounded at N=10 — zero of 512 one-shot samples were real
+   words, and k=2 collapsed 39.5% → 5.1%. Each extra position
+   multiplies the consistency burden. This is why real diffusion LMs
+   commit few tokens at a time.
+4. **Greedy collapsed to a non-word** ("repedating", 64/64). At N=5
+   its mode was real ("bales"); at N=10 the model's strongest joint
+   mode is not even English. Sampling rescues the model from its own
+   overconfidence.
+5. **Temperature remains the cheapest knob** (+34 pts for free), but
+   revision is now the quality ceiling — and they stack
+   (revision_T0.5 > revision_T0.7 > ancestral_T0.5).
+6. **Low temperature exposes dataset bias:** the top repeated words at
+   T=0.5 are all `-ing` suffixes (`tolerating`, `geminating`,
+   `refedating`, `levigating`). The model learned strong suffix priors
+   from the word list. Interpret small-model low-T outputs with that
+   lens.
+
+Unigram TV vs exact Bayes: 0.019 (N=5 v3: 0.0135) — slightly worse,
+consistent with the harder task.
+
 ## Artifacts
 
 - `model_b_word_diffusion.py` — iteration 1 training/eval script (verbatim
@@ -160,8 +216,9 @@ keyboard demo's "prompt loads the dice" claim at word scale.
 - `model-b-word-diffusion.log` — iteration 1 full training/eval stdout
 - `modelb_v2.pt` — iteration 1 weights (4.75M params, 19 MB)
 - `modelb_v3.pt` — iteration 2 weights (6.33M params, 8 layers, 25 MB)
-- `results-v3.json` — iteration 2 full results (all sampler tables,
-  prompting study, Bayes checks)
+- `modelb_n10.pt` — iteration 3 weights (N=10, 6.34M params, 27 MB)
+- `results-v3.json` — iteration 2 full results
+- `results-n10.json` — iteration 3 full results
 
 Both checkpoints and the model card live on Hugging Face at
 [PastelRuntime/KB-Diffusion-ModelB](https://huggingface.co/PastelRuntime/KB-Diffusion-ModelB).
@@ -190,19 +247,14 @@ public fork"). That's why HF hosts the weights.
 
 ## What to try next
 
-1. **N=10 (longer sequences).** Every trend here — temperature gains,
-   iteration gains, revision costs — was measured at N=5. Longer
-   sequences are where the revision sampler's tradeoff could flip, and
-   where the parallel-vs-ancestral gap should widen. This is the single
-   most informative next axis.
-2. **Temperature/quality frontier, properly.** T=0.5 won here, but the
-   sweep was coarse (1.0 / 0.7 / 0.5). A fine sweep plus a
-   validity-vs-uniqueness Pareto plot would make the tradeoff curve
-   exact.
-3. **Train on `WORDS ∪ EVAL_WORDS`** and re-measure the
-   `valid_train` vs `valid_english` gap to separate "learned English
-   letter statistics" from "memorized 8000 strings."
-4. **Browser export.** A 5-position Model B is small enough for a cute
-   live demo — type a one-letter prefix, watch words denoise in, with
-   the temperature slider front and center. The temperature finding
-   deserves to be *visible*.
+1. **N=20 / N=40 — extend the scaling curve.** Two points measured
+   (98.4% at N=5, 74.2% at N=10); a third would show whether the
+   validity decay is linear, exponential, or plateaus — and whether
+   revision's advantage keeps growing with sequence length.
+2. **Temperature/quality frontier, properly.** Fine sweep + a
+   validity-vs-uniqueness Pareto plot per N.
+3. **Train on `WORDS ∪ EVAL_WORDS`** to separate "learned English
+   letter statistics" from "memorized strings."
+4. **Browser export.** A live word-denoising demo with the
+   temperature slider and revision toggle front and center — the
+   N=5→N=10 story deserves to be visible.

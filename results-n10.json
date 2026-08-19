@@ -1,0 +1,285 @@
+{
+  "meta": {
+    "N": 10,
+    "words": 8000,
+    "steps": 12000,
+    "params": 6.34,
+    "unigram_tv": 0.019
+  },
+  "samplers": {
+    "parallel_T1": {
+      "valid_train": 0.0,
+      "valid_english": 0.0,
+      "unique": 512,
+      "passes_per_sample": 1.0,
+      "revisions_per_sample": 0.0,
+      "top5": [
+        [
+          "copldauynn",
+          1
+        ],
+        [
+          "biceaosbae",
+          1
+        ],
+        [
+          "sosclictes",
+          1
+        ],
+        [
+          "heplrmtnce",
+          1
+        ],
+        [
+          "ciurjargnh",
+          1
+        ]
+      ]
+    },
+    "ancestral_T1": {
+      "valid_train": 0.295,
+      "valid_english": 0.295,
+      "unique": 504,
+      "passes_per_sample": 10.0,
+      "revisions_per_sample": 0.0,
+      "top5": [
+        [
+          "predebater",
+          2
+        ],
+        [
+          "unshedding",
+          2
+        ],
+        [
+          "japonicize",
+          2
+        ],
+        [
+          "popularies",
+          2
+        ],
+        [
+          "ambulatory",
+          2
+        ]
+      ]
+    },
+    "ancestral_T0.7": {
+      "valid_train": 0.486,
+      "valid_english": 0.488,
+      "unique": 464,
+      "passes_per_sample": 10.0,
+      "revisions_per_sample": 0.0,
+      "top5": [
+        [
+          "intubation",
+          5
+        ],
+        [
+          "unshedding",
+          5
+        ],
+        [
+          "clattering",
+          5
+        ],
+        [
+          "predebater",
+          3
+        ],
+        [
+          "bryologist",
+          3
+        ]
+      ]
+    },
+    "ancestral_T0.5": {
+      "valid_train": 0.623,
+      "valid_english": 0.633,
+      "unique": 328,
+      "passes_per_sample": 10.0,
+      "revisions_per_sample": 0.0,
+      "top5": [
+        [
+          "ferrelling",
+          20
+        ],
+        [
+          "refedating",
+          16
+        ],
+        [
+          "clattering",
+          16
+        ],
+        [
+          "smuttiness",
+          9
+        ],
+        [
+          "unshedding",
+          9
+        ]
+      ]
+    },
+    "threshold_0.9": {
+      "valid_train": 0.289,
+      "valid_english": 0.289,
+      "unique": 504,
+      "passes_per_sample": 9.61,
+      "revisions_per_sample": 0.0,
+      "top5": [
+        [
+          "predebater",
+          2
+        ],
+        [
+          "unshedding",
+          2
+        ],
+        [
+          "japonicize",
+          2
+        ],
+        [
+          "popularies",
+          2
+        ],
+        [
+          "ambulatory",
+          2
+        ]
+      ]
+    },
+    "k2": {
+      "valid_train": 0.049,
+      "valid_english": 0.051,
+      "unique": 512,
+      "passes_per_sample": 5.0,
+      "revisions_per_sample": 0.0,
+      "top5": [
+        [
+          "intitation",
+          1
+        ],
+        [
+          "berropebst",
+          1
+        ],
+        [
+          "sqringraes",
+          1
+        ],
+        [
+          "tnehiiches",
+          1
+        ],
+        [
+          "arrhtoriid",
+          1
+        ]
+      ]
+    },
+    "k3": {
+      "valid_train": 0.004,
+      "valid_english": 0.004,
+      "unique": 512,
+      "passes_per_sample": 4.0,
+      "revisions_per_sample": 0.0,
+      "top5": [
+        [
+          "althualios",
+          1
+        ],
+        [
+          "anoylhmbsc",
+          1
+        ],
+        [
+          "findilraes",
+          1
+        ],
+        [
+          "meomorphec",
+          1
+        ],
+        [
+          "haktonriie",
+          1
+        ]
+      ]
+    },
+    "revision": {
+      "valid_train": 0.658,
+      "valid_english": 0.66,
+      "unique": 356,
+      "passes_per_sample": 40.45,
+      "revisions_per_sample": 15.82,
+      "top5": [
+        [
+          "trappiness",
+          11
+        ],
+        [
+          "liberating",
+          10
+        ],
+        [
+          "geminating",
+          7
+        ],
+        [
+          "tolerating",
+          7
+        ],
+        [
+          "refedating",
+          6
+        ]
+      ]
+    },
+    "revision_T0.5": {
+      "valid_train": 0.736,
+      "valid_english": 0.742,
+      "unique": 200,
+      "passes_per_sample": 38.53,
+      "revisions_per_sample": 14.75,
+      "top5": [
+        [
+          "tolerating",
+          49
+        ],
+        [
+          "geminating",
+          33
+        ],
+        [
+          "refedating",
+          26
+        ],
+        [
+          "levigating",
+          18
+        ],
+        [
+          "liberating",
+          17
+        ]
+      ]
+    },
+    "greedy_ancestral": {
+      "valid_train": 0.0,
+      "valid_english": 0.0,
+      "unique": 1,
+      "passes_per_sample": 10.0,
+      "revisions_per_sample": 0.0,
+      "top5": [
+        [
+          "repedating",
+          64
+        ]
+      ]
+    }
+  }
+}
